@@ -30,6 +30,16 @@ pre{background:#111d2c;border:1px solid #2f4b64;border-radius:12px;padding:12px;
 .diag-controls{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
 .diag-controls label{display:flex;gap:7px;align-items:center;font-size:.83rem}
 .diag-controls input{width:19px;height:19px}
+
+#visualLab{padding:13px;background:#182b3c;border:1px solid #5b7996;border-radius:12px;margin:12px 0}
+#visualLab h2{font-size:1rem;margin:0 0 6px}
+#visualLab .visual-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#visualLab label{display:block;font-size:.82rem;color:#c4d7eb}
+#visualLab select,#visualLab input[type=range]{display:block;width:100%;margin-top:6px}
+#visualLab select{background:#122437;color:#ecf6ff;padding:10px;border:1px solid #547a9f;border-radius:8px}
+#visualLab input[type=range]{accent-color:#8ac8ff}
+#visualLab output{float:right;color:#a9d8ff}
+@media(max-width:490px){#visualLab .visual-grid{grid-template-columns:1fr}}
 footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 </style>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"}}</script>
@@ -46,6 +56,19 @@ footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 </div>
 <div id="view" aria-label="Interactive 3D model viewport"><div id="empty">Loading authentic AB exterior-skin mesh…<p>Drag to rotate · Pinch to zoom · Two-finger drag to pan</p></div></div>
 <div class="status" id="status" role="status" aria-live="polite">No GLB loaded.</div>
+
+<section id="visualLab" aria-label="Actual model visual-quality workspace">
+<h2>Visual quality · Real AB exterior</h2>
+<p>Compare native GLB material with experimental studio-skin or neutral clay rendering. These settings do not change geometry or recreate missing structures.</p>
+<div class="visual-grid">
+<label>Surface rendering<select id="surfaceMode"><option value="source">Original GLB material</option><option value="skin">Studio skin study</option><option value="clay">Neutral clay</option></select></label>
+<label>Detail camera<select id="cameraPreset"><option value="full">Full figure</option><option value="face">Head / face inspection</option><option value="torso">Torso inspection</option><option value="hips">Pelvis inspection</option></select></label>
+<label>Material roughness <output id="roughValue">0.64</output><input id="roughness" type="range" min="0.3" max="1" value="0.64" step="0.02"></label>
+<label>Exposure <output id="exposureValue">1.00×</output><input id="exposure" type="range" min="0.55" max="1.65" value="1" step="0.05"></label>
+<label>Studio light <output id="lightValue">100%</output><input id="lighting" type="range" min="0.4" max="1.7" value="1" step="0.05"></label>
+</div>
+<div class="controls"><button id="resetVisual" type="button">Restore original appearance</button></div>
+</section>
 <section id="meshPanel"><h2>Mesh inspection</h2>
 <p>Inspect the meshes actually present inside the imported GLB. Missing components cannot be restored by toggling a viewer setting.</p>
 <input id="meshSearch" type="search" placeholder="Find mesh by name (e.g. skin, pelvis)" aria-label="Search mesh names">
@@ -80,9 +103,70 @@ const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamp
 scene.add(new THREE.HemisphereLight(0xe5f1ff,0x354b60,2.25));
 const key=new THREE.DirectionalLight(0xffefdf,3);key.position.set(3,7,5);scene.add(key);
 const fill=new THREE.DirectionalLight(0x9ac5ff,1.2);fill.position.set(-4,2,-3);scene.add(fill);
+const backLight=new THREE.DirectionalLight(0xffdcc4,1.5);backLight.position.set(1.5,3,-4);scene.add(backLight);
 const floor=new THREE.GridHelper(20,40,0x536a81,0x27394d);floor.position.y=-.003;scene.add(floor);
 let model=null,name='none',serial=0,bounds=null,meshRecords=[],currentInfo=null,defaultSides=new Map();
 const diagnosticIds=['doubleSide','wireframe'];
+let visualMaterials=new Map();
+const oldMaterials=new Map();
+function disposeVisualMaterials(){for(const m of visualMaterials.values())m.dispose();visualMaterials.clear();oldMaterials.clear();}
+function applyVisuals(){
+ if(!model)return;
+ const mode=$('surfaceMode').value;
+ for(const {mesh} of meshRecords){
+  if(!oldMaterials.has(mesh))oldMaterials.set(mesh,mesh.material);
+  const original=oldMaterials.get(mesh);
+  if(mode==='source'){mesh.material=original;continue;}
+  if(!visualMaterials.has(mesh)){
+   const first=Array.isArray(original)?original[0]:original;
+   const usesVertexColor=!!mesh.geometry?.attributes?.color;
+   const replacement=new THREE.MeshPhysicalMaterial({
+     color:mode==='clay'?0xc4c8cb:0xe4c0ac,
+     vertexColors:mode==='skin'&&usesVertexColor,
+     roughness:Number($('roughness').value),
+     metalness:0,
+     clearcoat:mode==='skin'?.03:0,
+     clearcoatRoughness:.85,
+     sheen:mode==='skin'?.05:0,
+     side:first?.side??THREE.FrontSide
+   });
+   visualMaterials.set(mesh,replacement);
+  }
+  const m=visualMaterials.get(mesh);
+  m.color.setHex(mode==='clay'?0xc4c8cb:0xe4c0ac);
+  m.vertexColors=mode==='skin'&&!!mesh.geometry?.attributes?.color;
+  m.roughness=Number($('roughness').value);
+  m.needsUpdate=true;
+  mesh.material=m;
+ }
+ renderer.toneMappingExposure=Number($('exposure').value);
+ const level=Number($('lighting').value);
+ key.intensity=3*level;fill.intensity=1.2*level;backLight.intensity=1.5*level;
+ $('roughValue').textContent=Number($('roughness').value).toFixed(2);
+ $('exposureValue').textContent=Number($('exposure').value).toFixed(2)+'×';
+ $('lightValue').textContent=Math.round(level*100)+'%';
+ defaultSides.clear();materialProps();
+}
+function resetVisuals(){
+ $('surfaceMode').value='source';$('cameraPreset').value='full';
+ $('roughness').value='.64';$('exposure').value='1';$('lighting').value='1';
+ applyVisuals();if(model)fit();
+}
+function zoomToPart(which){
+ if(!model)return;
+ if(which==='full'){fit();return;}
+ const box=new THREE.Box3().setFromObject(model),size=box.getSize(new THREE.Vector3());
+ const point=box.getCenter(new THREE.Vector3());
+ let span=size.y*.3;
+ if(which==='face'){point.y=box.max.y-size.y*.105;span=size.y*.13;}
+ if(which==='torso'){point.y=box.min.y+size.y*.62;span=size.y*.33;}
+ if(which==='hips'){point.y=box.min.y+size.y*.42;span=size.y*.29;}
+ const dist=span/Math.tan(THREE.MathUtils.degToRad(camera.fov*.5))*1.4;
+ controls.target.copy(point);
+ camera.position.set(point.x,point.y+span*.15,point.z+dist);
+ camera.near=.001;camera.far=Math.max(100,dist*100);camera.updateProjectionMatrix();controls.update();
+}
+
 const restoreRenderControls=()=>{for(const id of diagnosticIds)$(id).checked=false;defaultSides.clear();};
 function downloadBlob(blob,filename){
  const url=URL.createObjectURL(blob),a=document.createElement('a');
@@ -135,6 +219,7 @@ function exportReport(){
   schema:'AB.glb-inspection.1',source:name,
   capturedAt:new Date().toISOString(),
   ...currentInfo,
+  visualParameters:{mode:$('surfaceMode').value,roughness:Number($('roughness').value),exposure:renderer.toneMappingExposure,lighting:Number($('lighting').value)},
   meshes:meshRecords.map(x=>({name:x.label,triangles:x.triangles,visible:x.mesh.visible,skinned:!!x.mesh.isSkinnedMesh,material:(Array.isArray(x.mesh.material)?x.mesh.material:[x.mesh.material]).filter(Boolean).map(m=>({name:m.name||'',side:m.side,wireframe:!!m.wireframe}))})),
   note:'Reports only contents of loaded GLB; omitted source anatomy cannot be inferred from absence of names.'
  };
@@ -151,7 +236,7 @@ function capture(){
  }catch(e){status.textContent='Screenshot failed: '+e.message;}
 }
 const loader=new GLTFLoader();
-function clear(){restoreRenderControls();meshRecords=[];currentInfo=null;refreshMeshList();if(model){scene.remove(model);const geometries=new Set(),materials=new Set();model.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>materials.add(m));}});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());model=null;}bounds=null;}
+function clear(){if(model){for(const [mesh,orig] of oldMaterials)mesh.material=orig;}disposeVisualMaterials();restoreRenderControls();meshRecords=[];currentInfo=null;refreshMeshList();if(model){scene.remove(model);const geometries=new Set(),materials=new Set();model.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>materials.add(m));}});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());model=null;}bounds=null;}
 function stats(root){
  let meshes=0,triangles=0,vertices=0,materials=new Set(),skinned=0,animations=0;
  root.traverse(o=>{if(!o.isMesh)return;meshes++;if(o.isSkinnedMesh)skinned++;
@@ -179,6 +264,7 @@ function install(gltf,source){
  scene.add(model);host.querySelector('#empty')?.remove();
  const size=fit(),s=stats(model);
  recordMeshes(model);
+ applyVisuals();
  currentInfo={...s,animations:gltf.animations?.length||0,bounds:[size.x,size.y,size.z]};
  details.textContent='Loaded: '+source+'\nMeshes: '+s.meshes+'\nTriangles: '+s.triangles.toLocaleString()+
  '\nVertices: '+s.vertices.toLocaleString()+'\nMaterials: '+s.materials+
@@ -214,6 +300,10 @@ async function prototype(id,legacy=false){
   install(gltf,(legacy?'OLD ':'NATIVE ')+id+(legacy?' simplified prototype':' original AB exterior skin · rest pose'));}
  catch(e){if(token===serial)status.textContent='Prototype unavailable: '+e.message;}
 }
+$('surfaceMode').addEventListener('change',()=>{disposeVisualMaterials();applyVisuals()});
+for(const id of ['roughness','exposure','lighting'])$(id).addEventListener('input',applyVisuals);
+$('cameraPreset').addEventListener('change',e=>zoomToPart(e.target.value));
+$('resetVisual').addEventListener('click',resetVisuals);
 $('meshSearch').addEventListener('input',refreshMeshList);
 $('doubleSide').addEventListener('change',materialProps);
 $('wireframe').addEventListener('change',materialProps);
