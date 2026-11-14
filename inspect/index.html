@@ -56,6 +56,11 @@ footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 <body><header><h1>AB · 3D Model Inspector</h1><p>Direct GLB viewing on iPhone — no AR, no Quick Look</p></header>
 <main>
 <div class="notice"><strong>Now displaying authentic AB exterior-skin source meshes.</strong> A1 and B1 use the full 53,514-vertex retopology from the original AB model pack, not the earlier simplified prototypes. These are static rest-pose exports, with neutral skin shading; specialty anatomy, native eyes, hair and live simulation are not yet included. You can still open any GLB privately from your device.</div>
+<div class="notice" style="margin:12px 0">
+<strong>New experimental weighted-skin GLBs</strong>
+<p>The original AB external mesh is now available with its exported 90-joint palette and skin weights. These are experimental preview rigs, not the complete AB animation skeleton. Download a file, then use <strong>Choose GLB file</strong> above to load it into this viewer.</p>
+<p><a href="https://drive.google.com/file/d/1CWW__HI6YCcIRpLqRwS-ea14llDOpZ1P/view" target="_blank" rel="noopener">Download A1 weighted GLB</a> · <a href="https://drive.google.com/file/d/15bMSezApXNz_ktF53c_96RWV_-bCEZGD/view" target="_blank" rel="noopener">Download B1 weighted GLB</a></p>
+</div>
 <div class="controls">
 <label class="upload">Choose GLB file<input id="file" type="file" accept=".glb,model/gltf-binary"></label>
 <button id="protoA" type="button" aria-pressed="true">A1 · Native skin</button><button id="protoB" type="button" aria-pressed="false">B1 · Native skin</button>
