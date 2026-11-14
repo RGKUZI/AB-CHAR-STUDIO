@@ -150,7 +150,7 @@ function capture(){
  }catch(e){status.textContent='Screenshot failed: '+e.message;}
 }
 const loader=new GLTFLoader();
-function clear(){restoreRenderControls();meshRecords=[];currentInfo=null;refreshMeshList();if(model){scene.remove(model);model.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material){const mats=Array.isArray(o.material)?o.material:[o.material];for(const m of mats)m.dispose();}});model=null;}bounds=null;}
+function clear(){restoreRenderControls();meshRecords=[];currentInfo=null;refreshMeshList();if(model){scene.remove(model);const geometries=new Set(),materials=new Set();model.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>materials.add(m));}});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());model=null;}bounds=null;}
 function stats(root){
  let meshes=0,triangles=0,vertices=0,materials=new Set(),skinned=0,animations=0;
  root.traverse(o=>{if(!o.isMesh)return;meshes++;if(o.isSkinnedMesh)skinned++;
