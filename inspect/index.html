@@ -40,6 +40,15 @@ pre{background:#111d2c;border:1px solid #2f4b64;border-radius:12px;padding:12px;
 #visualLab input[type=range]{accent-color:#8ac8ff}
 #visualLab output{float:right;color:#a9d8ff}
 @media(max-width:490px){#visualLab .visual-grid{grid-template-columns:1fr}}
+
+#rigPanel{padding:13px;background:#172d32;border:1px solid #528a85;border-radius:12px;margin:12px 0}
+#rigPanel h2{font-size:1rem;margin:0 0 6px}
+#rigPanel .rig-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#rigPanel label{display:block;font-size:.8rem;color:#d4ede8}
+#rigPanel input[type=range]{display:block;width:100%;accent-color:#9de6cb;margin:7px 0}
+#rigPanel output{color:#a5ecd5}
+#rigInfo{font-size:.78rem;color:#aacac1}
+@media(max-width:490px){#rigPanel .rig-row{grid-template-columns:1fr}}
 footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 </style>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"}}</script>
@@ -68,6 +77,17 @@ footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 <label>Studio light <output id="lightValue">100%</output><input id="lighting" type="range" min="0.4" max="1.7" value="1" step="0.05"></label>
 </div>
 <div class="controls"><button id="resetVisual" type="button">Restore original appearance</button></div>
+</section>
+
+<section id="rigPanel">
+<h2>Experimental skin-weight preview</h2>
+<p>Only enabled when an imported GLB contains a skeleton. This demonstrates deformation from the exported weights and inferred pivots; it is not the original AB animation rig.</p>
+<div class="rig-row">
+<label>Left upper arm <output id="leftAngleLabel">0°</output><input id="leftAngle" type="range" min="-35" max="35" step="1" value="0" disabled></label>
+<label>Right upper arm <output id="rightAngleLabel">0°</output><input id="rightAngle" type="range" min="-35" max="35" step="1" value="0" disabled></label>
+</div>
+<div class="controls"><button id="resetRig" type="button">Reset rig preview</button></div>
+<div id="rigInfo">No skinned GLB loaded.</div>
 </section>
 <section id="meshPanel"><h2>Mesh inspection</h2>
 <p>Inspect the meshes actually present inside the imported GLB. Missing components cannot be restored by toggling a viewer setting.</p>
@@ -107,6 +127,28 @@ const backLight=new THREE.DirectionalLight(0xffdcc4,1.5);backLight.position.set(
 const floor=new THREE.GridHelper(20,40,0x536a81,0x27394d);floor.position.y=-.003;scene.add(floor);
 let model=null,name='none',serial=0,bounds=null,meshRecords=[],currentInfo=null,defaultSides=new Map();
 const diagnosticIds=['doubleSide','wireframe'];
+let rigBones={left:null,right:null};
+function resetRig(){
+ for(const bone of Object.values(rigBones))if(bone)bone.rotation.set(0,0,0);
+ $('leftAngle').value='0';$('rightAngle').value='0';
+ $('leftAngleLabel').textContent='0°';$('rightAngleLabel').textContent='0°';
+}
+function setupRig(){
+ rigBones={left:null,right:null};
+ if(!model)return;
+ const skinned=[];model.traverse(o=>{if(o.isSkinnedMesh)skinned.push(o)});
+ const bones=skinned[0]?.skeleton?.bones||[];
+ rigBones.left=bones.find(b=>b.name==='leftArm')||null;
+ rigBones.right=bones.find(b=>b.name==='rightArm')||null;
+ for(const side of ['left','right'])$(side+'Angle').disabled=!rigBones[side];
+ $('rigInfo').textContent=skinned.length?('Skinned meshes: '+skinned.length+' · Joint count: '+bones.length+(rigBones.left&&rigBones.right?' · upper-arm preview available':' · selected joints not found')):'No skinned mesh found. Current model is static.';
+ resetRig();
+}
+function poseRig(side,value){
+ const bone=rigBones[side];if(!bone)return;
+ const angle=Number(value);bone.rotation.z=(side==='left'?-1:1)*THREE.MathUtils.degToRad(angle);
+ $(side+'AngleLabel').textContent=angle+'°';
+}
 let visualMaterials=new Map();
 const oldMaterials=new Map();
 function disposeVisualMaterials(){for(const m of visualMaterials.values())m.dispose();visualMaterials.clear();oldMaterials.clear();}
@@ -236,7 +278,7 @@ function capture(){
  }catch(e){status.textContent='Screenshot failed: '+e.message;}
 }
 const loader=new GLTFLoader();
-function clear(){if(model){for(const [mesh,orig] of oldMaterials)mesh.material=orig;}disposeVisualMaterials();restoreRenderControls();meshRecords=[];currentInfo=null;refreshMeshList();if(model){scene.remove(model);const geometries=new Set(),materials=new Set();model.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>materials.add(m));}});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());model=null;}bounds=null;}
+function clear(){resetRig();rigBones={left:null,right:null};$('leftAngle').disabled=true;$('rightAngle').disabled=true;if(model){for(const [mesh,orig] of oldMaterials)mesh.material=orig;}disposeVisualMaterials();restoreRenderControls();meshRecords=[];currentInfo=null;refreshMeshList();if(model){scene.remove(model);const geometries=new Set(),materials=new Set();model.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>materials.add(m));}});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());model=null;}bounds=null;}
 function stats(root){
  let meshes=0,triangles=0,vertices=0,materials=new Set(),skinned=0,animations=0;
  root.traverse(o=>{if(!o.isMesh)return;meshes++;if(o.isSkinnedMesh)skinned++;
@@ -264,6 +306,7 @@ function install(gltf,source){
  scene.add(model);host.querySelector('#empty')?.remove();
  const size=fit(),s=stats(model);
  recordMeshes(model);
+ setupRig();
  applyVisuals();
  currentInfo={...s,animations:gltf.animations?.length||0,bounds:[size.x,size.y,size.z]};
  details.textContent='Loaded: '+source+'\nMeshes: '+s.meshes+'\nTriangles: '+s.triangles.toLocaleString()+
@@ -300,6 +343,9 @@ async function prototype(id,legacy=false){
   install(gltf,(legacy?'OLD ':'NATIVE ')+id+(legacy?' simplified prototype':' original AB exterior skin · rest pose'));}
  catch(e){if(token===serial)status.textContent='Prototype unavailable: '+e.message;}
 }
+$('leftAngle').addEventListener('input',e=>poseRig('left',e.target.value));
+$('rightAngle').addEventListener('input',e=>poseRig('right',e.target.value));
+$('resetRig').addEventListener('click',resetRig);
 $('surfaceMode').addEventListener('change',()=>{disposeVisualMaterials();applyVisuals()});
 for(const id of ['roughness','exposure','lighting'])$(id).addEventListener('input',applyVisuals);
 $('cameraPreset').addEventListener('change',e=>zoomToPart(e.target.value));
