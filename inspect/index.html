@@ -49,6 +49,13 @@ pre{background:#111d2c;border:1px solid #2f4b64;border-radius:12px;padding:12px;
 #rigPanel output{color:#a5ecd5}
 #rigInfo{font-size:.78rem;color:#aacac1}
 @media(max-width:490px){#rigPanel .rig-row{grid-template-columns:1fr}}
+
+#expressionLab{padding:13px;background:#29233c;border:1px solid #8171a5;border-radius:12px;margin:12px 0}
+#expressionLab h2{font-size:1rem;margin:0 0 7px}
+#expressionLab label{display:block;font-size:.82rem;color:#e8dcff}
+#expressionLab input[type=range]{display:block;width:100%;margin:8px 0;accent-color:#cbb8fa}
+#expressionLab output{color:#e4ceff}
+#expressionInfo{font-size:.78rem;color:#c4b7d8}
 footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 </style>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"}}</script>
@@ -56,6 +63,10 @@ footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 <body><header><h1>AB · 3D Model Inspector</h1><p>Direct GLB viewing on iPhone — no AR, no Quick Look</p></header>
 <main>
 <div class="notice"><strong>Now displaying authentic AB exterior-skin source meshes.</strong> A1 and B1 use the full 53,514-vertex retopology from the original AB model pack, not the earlier simplified prototypes. These are static rest-pose exports, with neutral skin shading; specialty anatomy, native eyes, hair and live simulation are not yet included. You can still open any GLB privately from your device.</div>
+
+<div class="notice" style="margin:12px 0"><strong>Source-derived eyelid morph models</strong>
+<p>New experimental files preserve original AB vertex weights and use the source <code>lidDelta</code> shape. Download one, then choose it from Files above to try Eye closure.</p>
+<p><a href="https://drive.google.com/drive/folders/1wEPBbzQ2JWguih9HgqEeABJRD5V0woPX" target="_blank" rel="noopener">Open the AB iPhone workspace to download A1/B1 Blink GLBs</a></p></div>
 <div class="notice" style="margin:12px 0">
 <strong>New experimental weighted-skin GLBs</strong>
 <p>The original AB external mesh is now available with its exported 90-joint palette and skin weights. These are experimental preview rigs, not the complete AB animation skeleton. Download a file, then use <strong>Choose GLB file</strong> above to load it into this viewer.</p>
@@ -84,6 +95,14 @@ footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 <div class="controls"><button id="resetVisual" type="button">Restore original appearance</button></div>
 </section>
 
+
+<section id="expressionLab">
+<h2>Original AB facial morph · experimental</h2>
+<p>Loads the original AB <code>lidDelta</code> morph from a weighted export. This control is available only when the imported GLB contains a morph target.</p>
+<label>Eye closure <output id="blinkLabel">0%</output><input id="blinkSlider" type="range" min="0" max="100" step="1" value="0" disabled></label>
+<div class="controls"><button id="resetExpression" type="button">Restore neutral expression</button></div>
+<div id="expressionInfo">Import an experimental A1/B1 Blink GLB to enable this control.</div>
+</section>
 <section id="rigPanel">
 <h2>Experimental skin-weight preview</h2>
 <p>Only enabled when an imported GLB contains a skeleton. This demonstrates deformation from the exported weights and inferred pivots; it is not the original AB animation rig.</p>
@@ -132,6 +151,25 @@ const backLight=new THREE.DirectionalLight(0xffdcc4,1.5);backLight.position.set(
 const floor=new THREE.GridHelper(20,40,0x536a81,0x27394d);floor.position.y=-.003;scene.add(floor);
 let model=null,name='none',serial=0,bounds=null,meshRecords=[],currentInfo=null,defaultSides=new Map();
 const diagnosticIds=['doubleSide','wireframe'];
+
+let activeMorphs=[];
+function resetExpression(){
+ const value=0;$('blinkSlider').value=String(value);$('blinkLabel').textContent='0%';
+ for(const mesh of activeMorphs)if(mesh.morphTargetInfluences?.length)mesh.morphTargetInfluences[0]=0;
+}
+function setupExpression(){
+ activeMorphs=[];if(model)model.traverse(o=>{if(o.isMesh&&o.morphTargetInfluences?.length)activeMorphs.push(o)});
+ $('blinkSlider').disabled=!activeMorphs.length;
+ $('expressionInfo').textContent=activeMorphs.length?
+  ('Available morph targets: '+activeMorphs.map(m=>Object.keys(m.morphTargetDictionary||{}).join(', ')||m.morphTargetInfluences.length+' unnamed').join(' · ')):
+  'No morph targets found. The existing static native GLBs do not include eyelid animation.';
+ resetExpression();
+}
+function setBlink(level){
+ const value=Math.max(0,Math.min(1,Number(level)/100));
+ for(const mesh of activeMorphs){if(mesh.morphTargetInfluences?.length)mesh.morphTargetInfluences[0]=value;}
+ $('blinkLabel').textContent=Math.round(value*100)+'%';
+}
 let rigBones={left:null,right:null};
 function resetRig(){
  for(const bone of Object.values(rigBones))if(bone)bone.rotation.set(0,0,0);
@@ -283,7 +321,7 @@ function capture(){
  }catch(e){status.textContent='Screenshot failed: '+e.message;}
 }
 const loader=new GLTFLoader();
-function clear(){resetRig();rigBones={left:null,right:null};$('leftAngle').disabled=true;$('rightAngle').disabled=true;if(model){for(const [mesh,orig] of oldMaterials)mesh.material=orig;}disposeVisualMaterials();restoreRenderControls();meshRecords=[];currentInfo=null;refreshMeshList();if(model){scene.remove(model);const geometries=new Set(),materials=new Set();model.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>materials.add(m));}});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());model=null;}bounds=null;}
+function clear(){resetExpression();activeMorphs=[];resetRig();rigBones={left:null,right:null};$('leftAngle').disabled=true;$('rightAngle').disabled=true;if(model){for(const [mesh,orig] of oldMaterials)mesh.material=orig;}disposeVisualMaterials();restoreRenderControls();meshRecords=[];currentInfo=null;refreshMeshList();if(model){scene.remove(model);const geometries=new Set(),materials=new Set();model.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>materials.add(m));}});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());model=null;}bounds=null;}
 function stats(root){
  let meshes=0,triangles=0,vertices=0,materials=new Set(),skinned=0,animations=0;
  root.traverse(o=>{if(!o.isMesh)return;meshes++;if(o.isSkinnedMesh)skinned++;
@@ -312,6 +350,7 @@ function install(gltf,source){
  const size=fit(),s=stats(model);
  recordMeshes(model);
  setupRig();
+ setupExpression();
  applyVisuals();
  currentInfo={...s,animations:gltf.animations?.length||0,bounds:[size.x,size.y,size.z]};
  details.textContent='Loaded: '+source+'\nMeshes: '+s.meshes+'\nTriangles: '+s.triangles.toLocaleString()+
@@ -348,6 +387,8 @@ async function prototype(id,legacy=false){
   install(gltf,(legacy?'OLD ':'NATIVE ')+id+(legacy?' simplified prototype':' original AB exterior skin · rest pose'));}
  catch(e){if(token===serial)status.textContent='Prototype unavailable: '+e.message;}
 }
+$('blinkSlider').addEventListener('input',e=>setBlink(e.target.value));
+$('resetExpression').addEventListener('click',resetExpression);
 $('leftAngle').addEventListener('input',e=>poseRig('left',e.target.value));
 $('rightAngle').addEventListener('input',e=>poseRig('right',e.target.value));
 $('resetRig').addEventListener('click',resetRig);
