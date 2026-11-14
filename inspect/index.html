@@ -66,7 +66,7 @@ footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 
 <div class="notice" style="margin:12px 0"><strong>Source-derived eyelid morph models</strong>
 <p>New experimental files preserve original AB vertex weights and use the source <code>lidDelta</code> shape. Download one, then choose it from Files above to try Eye closure.</p>
-<p><a href="https://drive.google.com/drive/folders/1wEPBbzQ2JWguih9HgqEeABJRD5V0woPX" target="_blank" rel="noopener">Open the AB iPhone workspace to download A1/B1 Blink GLBs</a></p></div>
+<p><a href="https://drive.google.com/file/d/1BmYiqIlUrFWdefvm0-OfmFkSkhSwGkwk/view" target="_blank" rel="noopener">A1 · Blink-enabled GLB</a> · <a href="https://drive.google.com/file/d/1jNXyG6dSuL8TMbgsQfAdnBPIvipR_i6S/view" target="_blank" rel="noopener">B1 · Blink-enabled GLB</a></p></div>
 <div class="notice" style="margin:12px 0">
 <strong>New experimental weighted-skin GLBs</strong>
 <p>The original AB external mesh is now available with its exported 90-joint palette and skin weights. These are experimental preview rigs, not the complete AB animation skeleton. Download a file, then use <strong>Choose GLB file</strong> above to load it into this viewer.</p>
@@ -100,7 +100,7 @@ footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 <h2>Original AB facial morph · experimental</h2>
 <p>Loads the original AB <code>lidDelta</code> morph from a weighted export. This control is available only when the imported GLB contains a morph target.</p>
 <label>Eye closure <output id="blinkLabel">0%</output><input id="blinkSlider" type="range" min="0" max="100" step="1" value="0" disabled></label>
-<div class="controls"><button id="resetExpression" type="button">Restore neutral expression</button></div>
+<div class="controls"><button id="resetExpression" type="button">Restore neutral expression</button><label style="display:flex;gap:7px;align-items:center"><input id="autoBlink" type="checkbox" disabled> Blink demonstration</label></div>
 <div id="expressionInfo">Import an experimental A1/B1 Blink GLB to enable this control.</div>
 </section>
 <section id="rigPanel">
@@ -154,12 +154,14 @@ const diagnosticIds=['doubleSide','wireframe'];
 
 let activeMorphs=[];
 function resetExpression(){
+ const auto=$('autoBlink');if(auto)auto.checked=false;
  const value=0;$('blinkSlider').value=String(value);$('blinkLabel').textContent='0%';
  for(const mesh of activeMorphs)if(mesh.morphTargetInfluences?.length)mesh.morphTargetInfluences[0]=0;
 }
 function setupExpression(){
  activeMorphs=[];if(model)model.traverse(o=>{if(o.isMesh&&o.morphTargetInfluences?.length)activeMorphs.push(o)});
  $('blinkSlider').disabled=!activeMorphs.length;
+ $('autoBlink').disabled=!activeMorphs.length;
  $('expressionInfo').textContent=activeMorphs.length?
   ('Available morph targets: '+activeMorphs.map(m=>Object.keys(m.morphTargetDictionary||{}).join(', ')||m.morphTargetInfluences.length+' unnamed').join(' · ')):
   'No morph targets found. The existing static native GLBs do not include eyelid animation.';
@@ -389,10 +391,19 @@ async function prototype(id,legacy=false){
 }
 $('blinkSlider').addEventListener('input',e=>setBlink(e.target.value));
 $('resetExpression').addEventListener('click',resetExpression);
+$('autoBlink').addEventListener('change',e=>{
+ $('blinkSlider').disabled=!!e.target.checked||!activeMorphs.length;
+ if(!e.target.checked)setBlink(0);
+});
 $('leftAngle').addEventListener('input',e=>poseRig('left',e.target.value));
 $('rightAngle').addEventListener('input',e=>poseRig('right',e.target.value));
 $('resetRig').addEventListener('click',resetRig);
-$('surfaceMode').addEventListener('change',()=>{disposeVisualMaterials();applyVisuals()});
+$('surfaceMode').addEventListener('change',()=>{
+  // Restore true source materials before clearing experimental clones.
+  for(const [mesh,original] of oldMaterials)mesh.material=original;
+  disposeVisualMaterials();
+  applyVisuals();
+});
 for(const id of ['roughness','exposure','lighting'])$(id).addEventListener('input',applyVisuals);
 $('cameraPreset').addEventListener('change',e=>zoomToPart(e.target.value));
 $('resetVisual').addEventListener('click',resetVisuals);
@@ -426,6 +437,11 @@ $('fit').addEventListener('click',()=>{try{fit()}catch(e){status.textContent=e.m
 $('reset').addEventListener('click',()=>{if(model)fit();else{camera.position.set(2.4,1.7,3.6);controls.target.set(0,1,0);controls.update()}});
 let lastWidth=0,lastHeight=0;
 function frame(){requestAnimationFrame(frame);
+ if($('autoBlink').checked&&activeMorphs.length){
+  const phase=(performance.now()/1000)%4.7;
+  const blink=phase<.13?phase/.13:phase<.28?1-(phase-.13)/.15:0;
+  setBlink(blink*100);
+ }
  const w=host.clientWidth,h=host.clientHeight;
  if(w!==lastWidth||h!==lastHeight){lastWidth=w;lastHeight=h;renderer.setSize(w,h,false);camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix();}
  controls.update();renderer.render(scene,camera);}
