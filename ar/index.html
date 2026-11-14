@@ -11,7 +11,7 @@ main{max-width:900px;margin:auto;padding:12px 12px 22px}
 .notice{background:#17273b;border:1px solid #425a74;padding:12px;border-radius:12px;font-size:.82rem;line-height:1.45}
 .tabs{display:flex;gap:9px;margin:12px 0}.tabs button{flex:1;min-height:45px;border:1px solid #547ca8;background:#172a42;color:white;border-radius:12px;font-size:1rem;font-weight:700}
 .tabs button[aria-pressed=true]{background:#356a9e;border-color:#99d2ff}
-model-viewer{width:100%;height:min(67vh,620px);min-height:360px;border:1px solid #39516b;border-radius:16px;background:radial-gradient(circle at 45% 35%,#253e57,#0c1421 72%);--poster-color:transparent}
+.importer{margin:12px 0;padding:12px;background:#172a42;border:1px solid #506b86;border-radius:12px}.importer label{display:block;font-size:.9rem;font-weight:700;margin:0 0 8px}.importer input{width:100%;font-size:.82rem;color:#eaf4ff}.importer button{margin-top:8px;border:1px solid #7799b7;background:#294a68;color:white;border-radius:8px;padding:8px 12px}model-viewer{width:100%;height:min(67vh,620px);min-height:360px;border:1px solid #39516b;border-radius:16px;background:radial-gradient(circle at 45% 35%,#253e57,#0c1421 72%);--poster-color:transparent}
 .arbutton{background:#acd9ff;color:#10233a;padding:13px 18px;border:0;border-radius:999px;font:750 15px system-ui;box-shadow:0 4px 18px #0005}
 #status{font-size:.81rem;margin-top:8px;min-height:2em;color:#b5cbe2}
 footer{padding:10px 2px;color:#9badc0;font-size:.76rem}
@@ -26,6 +26,7 @@ a{color:#a9d5ff}button:focus-visible{outline:2px solid #fff;outline-offset:2px}
 <button type="button" id="a1" aria-pressed="true">A1 · Preview</button>
 <button type="button" id="b1" aria-pressed="false">B1 · Preview</button>
 </nav>
+<section class="importer" aria-label="Import a native exterior GLB"><label for="nativeGLB">Test a GLB exported from the AB workbench</label><input type="file" id="nativeGLB" accept=".glb,model/gltf-binary"><p>Choose the GLB saved from the copied native runtime. This preview is session-only; the file is not uploaded to our website. On iPhone, Quick Look conversion of imported local files may vary by Safari version.</p><button id="restorePrototype" type="button" hidden>Restore original prototype</button></section>
 <model-viewer id="viewer"
  src="../assets/A1_Nomad_Static.glb"
  alt="Simplified prototype of A1, not the final AB anatomy model"
@@ -43,9 +44,11 @@ a{color:#a9d5ff}button:focus-visible{outline:2px solid #fff;outline-offset:2px}
 </main>
 <script>
 const viewer=document.querySelector('#viewer'),status=document.querySelector('#status');
-const names={A1:'A1',B1:'B1'};
+const names={A1:'A1',B1:'B1'};let localURL=null;
 function choose(id){
  if(!names[id])return;
+ if(localURL){URL.revokeObjectURL(localURL);localURL=null;document.querySelector('#nativeGLB').value='';}
+ document.querySelector('#restorePrototype').hidden=true;
  viewer.src='../assets/'+id+'_Nomad_Static.glb';
  viewer.alt='Simplified prototype of '+id+', not final AB anatomy';
  for(const key of Object.keys(names))document.querySelector('#'+key.toLowerCase()).setAttribute('aria-pressed',String(key===id));
@@ -54,6 +57,21 @@ function choose(id){
 }
 document.querySelector('#a1').addEventListener('click',()=>choose('A1'));
 document.querySelector('#b1').addEventListener('click',()=>choose('B1'));
+document.querySelector('#nativeGLB').addEventListener('change',e=>{
+ const file=e.target.files?.[0];if(!file)return;
+ if(!/\\.glb$/i.test(file.name)){status.textContent='Please choose a .glb file.';return;}
+ if(file.size>200*1024*1024){status.textContent='GLB exceeds the 200 MB inspection limit.';return;}
+ if(localURL)URL.revokeObjectURL(localURL);
+ localURL=URL.createObjectURL(file);
+ viewer.src=localURL;
+ viewer.alt='Locally imported native AB exterior GLB, pending visual verification';
+ status.textContent='Loading local GLB: '+file.name+' ('+(file.size/1048576).toFixed(1)+' MiB).';
+ document.querySelector('#restorePrototype').hidden=false;
+});
+document.querySelector('#restorePrototype').addEventListener('click',()=>{
+ choose(document.querySelector('#b1').getAttribute('aria-pressed')==='true'?'B1':'A1');
+});
+window.addEventListener('pagehide',()=>{if(localURL)URL.revokeObjectURL(localURL)});
 document.querySelector('#lockscale').addEventListener('change',e=>{
  viewer.setAttribute('ar-scale',e.target.checked?'fixed':'auto');
  status.textContent=e.target.checked?'AR scale locked to authored character size.':'AR pinch-to-resize enabled.';
