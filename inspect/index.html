@@ -36,13 +36,14 @@ footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 </head>
 <body><header><h1>AB · 3D Model Inspector</h1><p>Direct GLB viewing on iPhone — no AR, no Quick Look</p></header>
 <main>
-<div class="notice"><strong>Use this to test the actual exported file.</strong> The previously hosted A1/B1 GLBs are simplified prototypes. Import a new GLB below to replace what you see. The filename, triangle count and dimensions will update when a different file is loaded. Files stay in your browser; they are not uploaded to our server.</div>
+<div class="notice"><strong>Now displaying authentic AB exterior-skin source meshes.</strong> A1 and B1 use the full 53,514-vertex retopology from the original AB model pack, not the earlier simplified prototypes. These are static rest-pose exports, with neutral skin shading; specialty anatomy, native eyes, hair and live simulation are not yet included. You can still open any GLB privately from your device.</div>
 <div class="controls">
 <label class="upload">Choose GLB file<input id="file" type="file" accept=".glb,model/gltf-binary"></label>
-<button id="protoA" type="button">Old A1 prototype</button><button id="protoB" type="button">Old B1 prototype</button>
+<button id="protoA" type="button" aria-pressed="true">A1 · Native skin</button><button id="protoB" type="button" aria-pressed="false">B1 · Native skin</button>
+<button id="oldA" type="button">Legacy A1</button><button id="oldB" type="button">Legacy B1</button>
 <button id="fit" type="button">Fit model</button><button id="reset" type="button">Reset view</button>
 </div>
-<div id="view" aria-label="Interactive 3D model viewport"><div id="empty">Choose a GLB, or load an old prototype for reference.<p>Drag to rotate · Pinch to zoom · Two-finger drag to pan</p></div></div>
+<div id="view" aria-label="Interactive 3D model viewport"><div id="empty">Loading authentic AB exterior-skin mesh…<p>Drag to rotate · Pinch to zoom · Two-finger drag to pan</p></div></div>
 <div class="status" id="status" role="status" aria-live="polite">No GLB loaded.</div>
 <section id="meshPanel"><h2>Mesh inspection</h2>
 <p>Inspect the meshes actually present inside the imported GLB. Missing components cannot be restored by toggling a viewer setting.</p>
@@ -61,7 +62,7 @@ footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 <pre id="details">Loaded file: none
 Geometry: waiting for a GLB
 AR: off</pre>
-<footer>The viewer displays GLB geometry and materials, not AB's full anatomy simulation. If the triangle count and dimensions change but the model still looks like the old prototype, inspect the exporter and the actual source mesh. If the filename remains unchanged, the GLB has not loaded. <a href="../ar/">AR test page</a></footer>
+<footer>The viewer displays GLB geometry and materials, not AB's full anatomy simulation. These are static exterior-skin base meshes from AB source, not a capture of the current posed simulation. Missing specialist anatomy must be brought into the export pipeline; toggles cannot create geometry that was not exported. <a href="../ar/">AR test page</a></footer>
 </main>
 <script type="module">
 import * as THREE from 'three';
@@ -198,16 +199,18 @@ $('file').addEventListener('change',async e=>{
  try{await openData(await file.arrayBuffer(),file.name+' ('+(file.size/1048576).toFixed(2)+' MiB)');}
  catch(err){status.textContent='Unable to read file: '+err.message;}
 });
-async function prototype(id){
- const url='../assets/'+id+'_Nomad_Static.glb',token=++serial;
- status.textContent='Downloading old '+id+' prototype…';
+async function prototype(id,legacy=false){
+ const url=legacy?('../assets/'+id+'_Nomad_Static.glb'):('../assets/'+id+'_AB_NativeExterior_Rest.glb'),token=++serial;
+ $('protoA').setAttribute('aria-pressed',String(!legacy&&id==='A1'));
+ $('protoB').setAttribute('aria-pressed',String(!legacy&&id==='B1'));
+ status.textContent='Loading '+(legacy?'legacy ':'native ')+id+' mesh…';
  try{const res=await fetch(url);if(!res.ok)throw Error('HTTP '+res.status);
   const gltf=await loader.parseAsync(await res.arrayBuffer(),'');
   if(token!==serial)return;
   // Earlier prototype geometry is authored with its vertical axis on Z.
   // Rotate only the prototype. Native GLB exports stay in their original Y-up orientation.
-  gltf.scene.rotation.x=-Math.PI/2;
-  install(gltf,'OLD '+id+' simplified prototype');}
+  if(legacy)gltf.scene.rotation.x=-Math.PI/2;
+  install(gltf,(legacy?'OLD ':'NATIVE ')+id+(legacy?' simplified prototype':' original AB exterior skin · rest pose'));}
  catch(e){if(token===serial)status.textContent='Prototype unavailable: '+e.message;}
 }
 $('meshSearch').addEventListener('input',refreshMeshList);
@@ -218,6 +221,9 @@ $('saveReport').addEventListener('click',exportReport);
 $('saveScreenshot').addEventListener('click',capture);
 $('protoA').addEventListener('click',()=>prototype('A1'));
 $('protoB').addEventListener('click',()=>prototype('B1'));
+$('oldA').addEventListener('click',()=>prototype('A1',true));
+$('oldB').addEventListener('click',()=>prototype('B1',true));
+prototype('A1');
 $('fit').addEventListener('click',()=>{try{fit()}catch(e){status.textContent=e.message}});
 $('reset').addEventListener('click',()=>{if(model)fit();else{camera.position.set(2.4,1.7,3.6);controls.target.set(0,1,0);controls.update()}});
 let lastWidth=0,lastHeight=0;
