@@ -42,6 +42,7 @@ footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 <button id="protoA" type="button" aria-pressed="true">A1 · Native skin</button><button id="protoB" type="button" aria-pressed="false">B1 · Native skin</button>
 <button id="oldA" type="button">Legacy A1</button><button id="oldB" type="button">Legacy B1</button>
 <button id="fit" type="button">Fit model</button><button id="reset" type="button">Reset view</button>
+<button id="front" type="button">Front</button><button id="side" type="button">Side</button><button id="back" type="button">Back</button>
 </div>
 <div id="view" aria-label="Interactive 3D model viewport"><div id="empty">Loading authentic AB exterior-skin mesh…<p>Drag to rotate · Pinch to zoom · Two-finger drag to pan</p></div></div>
 <div class="status" id="status" role="status" aria-live="polite">No GLB loaded.</div>
@@ -224,6 +225,21 @@ $('protoB').addEventListener('click',()=>prototype('B1'));
 $('oldA').addEventListener('click',()=>prototype('A1',true));
 $('oldB').addEventListener('click',()=>prototype('B1',true));
 prototype('A1');
+function orientTo(direction){
+ if(!model)return;
+ model.updateWorldMatrix(true,true);
+ const box=new THREE.Box3().setFromObject(model),center=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3());
+ const radius=Math.max(.05,size.length()*.5);
+ const distance=radius/Math.sin(THREE.MathUtils.degToRad(camera.fov*.5))*1.35;
+ controls.target.copy(center);
+ const offset=direction==='front'?new THREE.Vector3(0,.02,1):
+              direction==='back'?new THREE.Vector3(0,.02,-1):new THREE.Vector3(1,.02,0);
+ camera.position.copy(center).addScaledVector(offset.normalize(),distance);
+ camera.near=Math.max(.001,distance/1000);camera.far=Math.max(100,distance*100);camera.updateProjectionMatrix();
+ controls.update();
+ status.textContent=direction.charAt(0).toUpperCase()+direction.slice(1)+' view selected — '+name;
+}
+for(const id of ['front','side','back'])$(id).addEventListener('click',()=>orientTo(id));
 $('fit').addEventListener('click',()=>{try{fit()}catch(e){status.textContent=e.message}});
 $('reset').addEventListener('click',()=>{if(model)fit();else{camera.position.set(2.4,1.7,3.6);controls.target.set(0,1,0);controls.update()}});
 let lastWidth=0,lastHeight=0;
