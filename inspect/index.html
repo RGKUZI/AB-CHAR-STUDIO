@@ -20,6 +20,16 @@ label.upload input{position:absolute;opacity:0;width:1px;height:1px}
 #empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:25px;pointer-events:none;color:#b5cee4}
 .status{margin:11px 0;font-size:.87rem;color:#a4cbed;min-height:1.3em}
 pre{background:#111d2c;border:1px solid #2f4b64;border-radius:12px;padding:12px;font-size:.76rem;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto}
+#meshPanel{margin:12px 0;padding:12px;border:1px solid #35536d;background:#111e2d;border-radius:12px}
+#meshPanel h2{font-size:1rem;margin:0 0 6px}
+#meshSearch{width:100%;padding:11px;background:#0b1624;border:1px solid #607895;color:#fff;border-radius:8px;font-size:1rem}
+#parts{max-height:255px;overflow:auto;margin-top:9px}
+.part{display:flex;align-items:center;gap:9px;padding:8px 4px;border-bottom:1px solid #ffffff17;font-size:.82rem}
+.part input{width:20px;height:20px;flex-shrink:0;accent-color:#8dc9ff}.part span{overflow-wrap:anywhere;flex:1}
+.part small{font-size:.71rem;color:#9baec3}
+.diag-controls{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.diag-controls label{display:flex;gap:7px;align-items:center;font-size:.83rem}
+.diag-controls input{width:19px;height:19px}
 footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 </style>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"}}</script>
@@ -34,6 +44,20 @@ footer{font-size:.8rem;color:#a8bacb;margin-top:13px}a{color:#99d2ff}
 </div>
 <div id="view" aria-label="Interactive 3D model viewport"><div id="empty">Choose a GLB, or load an old prototype for reference.<p>Drag to rotate · Pinch to zoom · Two-finger drag to pan</p></div></div>
 <div class="status" id="status" role="status" aria-live="polite">No GLB loaded.</div>
+<section id="meshPanel"><h2>Mesh inspection</h2>
+<p>Inspect the meshes actually present inside the imported GLB. Missing components cannot be restored by toggling a viewer setting.</p>
+<input id="meshSearch" type="search" placeholder="Find mesh by name (e.g. skin, pelvis)" aria-label="Search mesh names">
+<div class="diag-controls">
+<label><input id="doubleSide" type="checkbox"> Show both sides of mesh surfaces</label>
+<label><input id="wireframe" type="checkbox"> Wireframe</label>
+</div>
+<div class="controls">
+<button id="showAll" type="button">Show all meshes</button>
+<button id="saveReport" type="button">Export diagnostics</button>
+<button id="saveScreenshot" type="button">Save screenshot</button>
+</div>
+<div id="parts">Load a GLB to inspect its component meshes.</div>
+</section>
 <pre id="details">Loaded file: none
 Geometry: waiting for a GLB
 AR: off</pre>
@@ -55,9 +79,77 @@ scene.add(new THREE.HemisphereLight(0xe5f1ff,0x354b60,2.25));
 const key=new THREE.DirectionalLight(0xffefdf,3);key.position.set(3,7,5);scene.add(key);
 const fill=new THREE.DirectionalLight(0x9ac5ff,1.2);fill.position.set(-4,2,-3);scene.add(fill);
 const floor=new THREE.GridHelper(20,40,0x536a81,0x27394d);floor.position.y=-.003;scene.add(floor);
-let model=null,name='none',currentUrl=null,serial=0,bounds=null;
+let model=null,name='none',serial=0,bounds=null,meshRecords=[],currentInfo=null,defaultSides=new Map();
+const diagnosticIds=['doubleSide','wireframe'];
+const restoreRenderControls=()=>{for(const id of diagnosticIds)$(id).checked=false;defaultSides.clear();};
+function downloadBlob(blob,filename){
+ const url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+function materialProps(){
+ const wire=$('wireframe').checked,side=$('doubleSide').checked;
+ const visited=new Set();
+ for(const item of meshRecords){
+  const mats=Array.isArray(item.mesh.material)?item.mesh.material:[item.mesh.material];
+  for(const m of mats)if(m&&!visited.has(m)){
+   visited.add(m);
+   if(!defaultSides.has(m))defaultSides.set(m,{side:m.side,wireframe:m.wireframe});
+   const prior=defaultSides.get(m);
+   m.side=side?THREE.DoubleSide:prior.side;
+   if('wireframe' in m)m.wireframe=wire?true:prior.wireframe;
+   m.needsUpdate=true;
+  }
+ }
+}
+function refreshMeshList(){
+ const filter=$('meshSearch').value.trim().toLowerCase();
+ const matches=meshRecords.filter(x=>x.label.toLowerCase().includes(filter));
+ const parts=$('parts');parts.replaceChildren();
+ if(!meshRecords.length){parts.textContent='Load a GLB to inspect its component meshes.';return;}
+ if(!matches.length){parts.textContent='No meshes match this search.';return;}
+ for(const item of matches.slice(0,400)){
+   const row=document.createElement('label');row.className='part';
+   const cb=document.createElement('input');cb.type='checkbox';cb.checked=item.mesh.visible;
+   cb.addEventListener('change',()=>{item.mesh.visible=cb.checked;status.textContent=item.label+(cb.checked?' visible':' hidden')});
+   const title=document.createElement('span');title.textContent=item.label;
+   const count=document.createElement('small');count.textContent=item.triangles.toLocaleString()+' tris';
+   row.append(cb,title,count);parts.append(row);
+ }
+ if(matches.length>400){const info=document.createElement('p');info.textContent='Showing first 400 matches of '+matches.length+'. Refine the search.';parts.append(info);}
+}
+function recordMeshes(root){
+ meshRecords=[];let i=0;
+ root.traverse(o=>{
+  if(!o.isMesh)return;
+  const g=o.geometry,triangles=g?(g.index?Math.floor(g.index.count/3):Math.floor((g.attributes.position?.count||0)/3)):0;
+  meshRecords.push({mesh:o,label:o.name?.trim()||'Unnamed mesh '+(++i),triangles});
+ });
+ refreshMeshList();
+}
+function exportReport(){
+ if(!currentInfo){status.textContent='Load a GLB before exporting a report.';return;}
+ const report={
+  schema:'AB.glb-inspection.1',source:name,
+  capturedAt:new Date().toISOString(),
+  ...currentInfo,
+  meshes:meshRecords.map(x=>({name:x.label,triangles:x.triangles,visible:x.mesh.visible,skinned:!!x.mesh.isSkinnedMesh,material:(Array.isArray(x.mesh.material)?x.mesh.material:[x.mesh.material]).filter(Boolean).map(m=>({name:m.name||'',side:m.side,wireframe:!!m.wireframe}))})),
+  note:'Reports only contents of loaded GLB; omitted source anatomy cannot be inferred from absence of names.'
+ };
+ downloadBlob(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),'AB-GLB-inspection.json');
+}
+function capture(){
+ if(!model){status.textContent='Load a GLB before taking a screenshot.';return;}
+ try{
+  renderer.render(scene,camera);
+  renderer.domElement.toBlob(blob=>{
+   if(!blob){status.textContent='Screenshot unavailable from this WebGL canvas.';return;}
+   downloadBlob(blob,'AB-GLB-view.png');status.textContent='Viewport screenshot saved.';
+  },'image/png');
+ }catch(e){status.textContent='Screenshot failed: '+e.message;}
+}
 const loader=new GLTFLoader();
-function clear(){if(model){scene.remove(model);model.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material){const mats=Array.isArray(o.material)?o.material:[o.material];for(const m of mats)m.dispose();}});model=null;}bounds=null;}
+function clear(){restoreRenderControls();meshRecords=[];currentInfo=null;refreshMeshList();if(model){scene.remove(model);model.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material){const mats=Array.isArray(o.material)?o.material:[o.material];for(const m of mats)m.dispose();}});model=null;}bounds=null;}
 function stats(root){
  let meshes=0,triangles=0,vertices=0,materials=new Set(),skinned=0,animations=0;
  root.traverse(o=>{if(!o.isMesh)return;meshes++;if(o.isSkinnedMesh)skinned++;
@@ -84,6 +176,8 @@ function install(gltf,source){
  clear();model=gltf.scene;name=source;
  scene.add(model);host.querySelector('#empty')?.remove();
  const size=fit(),s=stats(model);
+ recordMeshes(model);
+ currentInfo={...s,animations:gltf.animations?.length||0,bounds:[size.x,size.y,size.z]};
  details.textContent='Loaded: '+source+'\nMeshes: '+s.meshes+'\nTriangles: '+s.triangles.toLocaleString()+
  '\nVertices: '+s.vertices.toLocaleString()+'\nMaterials: '+s.materials+
  '\nSkinned meshes: '+s.skinned+'\nAnimations: '+(gltf.animations?.length||0)+
@@ -116,6 +210,12 @@ async function prototype(id){
   install(gltf,'OLD '+id+' simplified prototype');}
  catch(e){if(token===serial)status.textContent='Prototype unavailable: '+e.message;}
 }
+$('meshSearch').addEventListener('input',refreshMeshList);
+$('doubleSide').addEventListener('change',materialProps);
+$('wireframe').addEventListener('change',materialProps);
+$('showAll').addEventListener('click',()=>{meshRecords.forEach(x=>x.mesh.visible=true);refreshMeshList();status.textContent='All meshes visible.'});
+$('saveReport').addEventListener('click',exportReport);
+$('saveScreenshot').addEventListener('click',capture);
 $('protoA').addEventListener('click',()=>prototype('A1'));
 $('protoB').addEventListener('click',()=>prototype('B1'));
 $('fit').addEventListener('click',()=>{try{fit()}catch(e){status.textContent=e.message}});
