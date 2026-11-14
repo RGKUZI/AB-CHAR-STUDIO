@@ -49,7 +49,7 @@ function choose(id){
  if(!names[id])return;
  if(localURL){URL.revokeObjectURL(localURL);localURL=null;document.querySelector('#nativeGLB').value='';}
  document.querySelector('#restorePrototype').hidden=true;
- viewer.src='../assets/'+id+'_Nomad_Static.glb';
+ viewer.setAttribute('orientation','-90deg 0deg 0deg');\n viewer.src='../assets/'+id+'_Nomad_Static.glb';
  viewer.alt='Simplified prototype of '+id+', not final AB anatomy';
  for(const key of Object.keys(names))document.querySelector('#'+key.toLowerCase()).setAttribute('aria-pressed',String(key===id));
  status.textContent='Loading '+id+' preview…';
