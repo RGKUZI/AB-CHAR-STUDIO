@@ -17,7 +17,7 @@ model-viewer{width:100%;height:min(67vh,620px);min-height:360px;border:1px solid
 footer{padding:10px 2px;color:#9badc0;font-size:.76rem}
 a{color:#a9d5ff}button:focus-visible{outline:2px solid #fff;outline-offset:2px}
 </style>
-<script type="module" src="https://unpkg.com/@google/model-viewer@4.1.0/dist/model-viewer.min.js"></script>
+<script type="module" src="https://unpkg.com/@google/model-viewer@4.3.1/dist/model-viewer.min.js"></script>
 </head><body>
 <header><h1>AB · iPhone AR</h1><p>Phase 1 — technical placement preview</p></header>
 <main>
@@ -30,13 +30,14 @@ a{color:#a9d5ff}button:focus-visible{outline:2px solid #fff;outline-offset:2px}
  src="../assets/A1_Nomad_Static.glb"
  alt="Simplified prototype of A1, not the final AB anatomy model"
  camera-controls touch-action="pan-y" auto-rotate
- ar ar-modes="quick-look" ar-placement="floor" ar-scale="auto"
+ ar ar-modes="quick-look" ar-placement="floor" ar-scale="fixed"
  shadow-intensity="0.8" exposure="1.05"
  camera-orbit="0deg 75deg auto"
  orientation="-90deg 0deg 0deg"
  interaction-prompt="auto" loading="eager">
  <button type="button" class="arbutton" slot="ar-button">View in your space</button>
 </model-viewer>
+<div class="notice" style="margin-top:10px"><label><input id="lockscale" type="checkbox" checked> Lock to model's authored size (recommended for calibration)</label><p id="height">A1 prototype: approximately 1.78 m tall.</p></div>
 <div id="status" role="status" aria-live="polite">Loading A1 preview…</div>
 <footer>On iPhone: open this page in Safari, choose a character, then tap <strong>View in your space</strong>. Allow camera access if asked. The viewer may generate USDZ for Apple's AR Quick Look; that conversion can omit animation or some material features. Full AB export is not complete. <a href="../">Back to AB Studio</a>.</footer>
 </main>
@@ -49,9 +50,14 @@ function choose(id){
  viewer.alt='Simplified prototype of '+id+', not final AB anatomy';
  for(const key of Object.keys(names))document.querySelector('#'+key.toLowerCase()).setAttribute('aria-pressed',String(key===id));
  status.textContent='Loading '+id+' preview…';
+ document.querySelector('#height').textContent=id==='A1'?'A1 prototype: approximately 1.78 m tall.':'B1 prototype: approximately 1.65 m tall.';
 }
 document.querySelector('#a1').addEventListener('click',()=>choose('A1'));
 document.querySelector('#b1').addEventListener('click',()=>choose('B1'));
+document.querySelector('#lockscale').addEventListener('change',e=>{
+ viewer.setAttribute('ar-scale',e.target.checked?'fixed':'auto');
+ status.textContent=e.target.checked?'AR scale locked to authored character size.':'AR pinch-to-resize enabled.';
+});
 viewer.addEventListener('load',()=>{status.textContent='3D preview ready. On a compatible iPhone, use View in your space.'});
 viewer.addEventListener('error',e=>{status.textContent='Could not load this prototype. Try refreshing Safari or checking your network.';console.warn('AB AR preview load failed',e)});
 viewer.addEventListener('ar-status',e=>{if(e.detail.status==='failed')status.textContent='AR launch failed. Try Safari on an AR-capable iPhone.'});
